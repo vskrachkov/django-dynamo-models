@@ -1,5 +1,6 @@
 import collections
 
+from collections import defaultdict
 from django.db import models
 
 
@@ -33,28 +34,44 @@ def create_model(name, base, attrs=None, meta_attrs=None):
     return Model
 
 
-_models = collections.deque([])
+QueMap = lambda: defaultdict(lambda: collections.deque([]))
+DictMap = lambda: defaultdict(dict)
+
+_models_map = QueMap()
+_created_models = DictMap()
 
 
-def register_model(name, base, attrs=None, meta_attrs=None):
-    _models.append((name, base, attrs, meta_attrs))
+def register_model(namespace, name, base, attrs=None, meta_attrs=None):
+    _models_map[namespace].append((name, base, attrs, meta_attrs))
 
 
-def get_registered_models():
+def save_model_class(namespace, name, model):
+    _created_models[namespace].update({name: model})
+
+
+def get_model_class(namespace, name):
+    return _created_models[namespace].get(name)
+
+
+def get_registered_models(namespace):
+    _models = _models_map[namespace]
     while _models:
-        yield _models.pop()
+        item = _models.pop()
+        yield item
 
 
-def create_registered_models():
-    for name, base, attrs, meta_attrs in get_registered_models():
-        create_model(name, base, attrs, meta_attrs)
+def create_registered_models(namespace):
+    for name, base, attrs, meta_attrs in get_registered_models(namespace):
+        Model = create_model(name, base, attrs, meta_attrs)
+        save_model_class(namespace, name, Model)
 
 
 ###### register and create some test models ######
-INTERVALS = [1, 20, 60, 120, 360, 1440, 3600]
+INTERVALS = [1, 20, 60, 120, 360, 1440, 3600, 7600]
 
 for i in INTERVALS:
     register_model(
+        'StatAppModelsNamespace',
         f'StatPer{i}Minutes' if i != 1 else 'StatPerMinute',
         AbstractModel,
         attrs={'additional_field': models.IntegerField()},
@@ -63,4 +80,4 @@ for i in INTERVALS:
         }
     )
 
-create_registered_models()
+create_registered_models('StatAppModelsNamespace')
